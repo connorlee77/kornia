@@ -161,10 +161,15 @@ class ScalePyramid(nn.Module):
             'sigma_step=' + str(self.sigma_step) + \
             'double_image=' + str(self.double_image) + ')'
 
+    # def get_kernel_size(self, sigma: float):
+    #     ksize = int(2.0 * 4.0 * sigma + 1.0)
+    #     if ksize % 2 == 0:
+    #         ksize += 1
+    #     return ksize
+
     def get_kernel_size(self, sigma: float):
-        ksize = int(2.0 * 4.0 * sigma + 1.0)
-        if ksize % 2 == 0:
-            ksize += 1
+        ksize = round(2.0 * 3.0 * sigma + 1.0) | 1
+        assert(ksize % 2 == 1)
         return ksize
 
     def forward(self, x: torch.Tensor) -> Tuple[  # type: ignore
@@ -183,16 +188,16 @@ class ScalePyramid(nn.Module):
             cur_level = gaussian_blur2d(x, (ksize, ksize), (sigma, sigma))
         else:
             cur_level = x
-        sigmas = [cur_sigma * torch.ones(bs, self.n_levels).to(x.device).to(x.dtype)]
+        sigmas = [cur_sigma * torch.ones(bs, self.n_levels + 3).to(x.device).to(x.dtype)]
         pixel_dists = [pixel_distance * torch.ones(
                        bs,
-                       self.n_levels).to(
+                       self.n_levels + 3).to(
                        x.device).to(x.dtype)]
         pyr = [[cur_level.unsqueeze(1)]]
         oct_idx = 0
         while True:
             cur_level = pyr[-1][0].squeeze(1)
-            for level_idx in range(1, self.n_levels):
+            for level_idx in range(1, self.n_levels + 3):
                 sigma = cur_sigma * math.sqrt(self.sigma_step**2 - 1.0)
                 cur_level = gaussian_blur2d(
                     cur_level, (ksize, ksize), (sigma, sigma))
@@ -201,8 +206,7 @@ class ScalePyramid(nn.Module):
                 sigmas[-1][:, level_idx] = cur_sigma
                 pixel_dists[-1][:, level_idx] = pixel_distance
             nextOctaveFirstLevel = F.interpolate(pyr[-1][-1].squeeze(1), scale_factor=0.5,
-                                                 mode='bilinear',
-                                                 align_corners=False)
+                                                 mode='nearest')
             pixel_distance *= 2.0
             cur_sigma = self.init_sigma
             if (min(nextOctaveFirstLevel.size(2),
@@ -211,12 +215,12 @@ class ScalePyramid(nn.Module):
             pyr.append([nextOctaveFirstLevel.unsqueeze(1)])
             sigmas.append(cur_sigma * torch.ones(
                           bs,
-                          self.n_levels).to(
+                          self.n_levels + 3).to(
                           x.device))
             pixel_dists.append(
                 pixel_distance * torch.ones(
                     bs,
-                    self.n_levels).to(
+                    self.n_levels + 3).to(
                     x.device))
             oct_idx += 1
         for i in range(len(pyr)):
