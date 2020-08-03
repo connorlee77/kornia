@@ -150,6 +150,8 @@ class ScalePyramid(nn.Module):
         self.border = min_size // 2 - 1
         self.sigma_step = 2 ** (1. / float(self.n_levels))
         self.double_image = double_image
+
+        print("Using {} total layers".format(self.n_levels + 3))
         return
 
     def __repr__(self) -> str:
@@ -206,7 +208,8 @@ class ScalePyramid(nn.Module):
                 sigmas[-1][:, level_idx] = cur_sigma
                 pixel_dists[-1][:, level_idx] = pixel_distance
             nextOctaveFirstLevel = F.interpolate(pyr[-1][-1].squeeze(1), scale_factor=0.5,
-                                                 mode='nearest')
+                                                 mode='bilinear',
+                                                 align_corners=False)
             pixel_distance *= 2.0
             cur_sigma = self.init_sigma
             if (min(nextOctaveFirstLevel.size(2),
